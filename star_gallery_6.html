@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>부산일과학고 천문대 · 관측 아카이브 천구 갤러리</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.min.css" />
+<script src="https://aladin.cds.unistra.fr/AladinLite/api/v3/latest/aladin.js" charset="utf-8"></script>
+
+<style>
+  :root{
+    --bg-void: #0a0e18;
+    --bg-panel: #121a2b;
+    --line: #2a3550;
+    --text: #eaedf5;
+    --text-muted: #8b93ac;
+    --accent-gold: #e8b85c;
+    --accent-halpha: #ff6b5b;
+    --radius: 10px;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; height:100%; width:100%; overflow:hidden;
+    background: var(--bg-void);
+    color: var(--text);
+    font-family: 'Noto Sans KR', -apple-system, sans-serif;
+  }
+  .mono{ font-family: 'IBM Plex Mono', monospace; }
+
+  #app{
+    display:grid;
+    grid-template-rows: 56px 1fr;
+    grid-template-columns: 300px 1fr;
+    height:100vh; width:100vw;
+    background: var(--bg-void);
+  }
+
+  /* ---------- Top bar ---------- */
+  #topbar{
+    grid-column: 1 / 3;
+    display:flex; align-items:center; gap:16px;
+    padding: 0 16px;
+    background: linear-gradient(180deg, #0d1322 0%, #0a0e18 100%);
+    border-bottom: 1px solid var(--line);
+    z-index: 20;
+  }
+  #brand{ display:flex; flex-direction:column; line-height:1.15; flex-shrink:0; }
+  #brand .eyebrow{
+    font-size:10px; letter-spacing:.14em; color: var(--accent-gold);
+    font-family:'IBM Plex Mono', monospace; text-transform:uppercase;
+  }
+  #brand .title{ font-weight:900; font-size:15px; }
+  #railToggle{
+    display:none;
+    background:none; border:1px solid var(--line); color:var(--text);
+    width:34px; height:34px; border-radius:8px; cursor:pointer; font-size:16px;
+    flex-shrink:0;
+  }
+  #searchWrap{ flex:1; max-width:520px; position:relative; }
+  #searchInput{
+    width:100%; background: var(--bg-panel); border:1px solid var(--line);
+    color: var(--text); border-radius: 999px; padding: 9px 16px;
+    font-size:13px; font-family:inherit; outline:none;
+  }
+  #searchInput:focus{ border-color: var(--accent-gold); }
+  #searchInput::placeholder{ color: var(--text-muted); }
+  #counter{
+    margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:12px;
+    color: var(--text-muted); white-space:nowrap;
+  }
+  #counter b{ color: var(--accent-gold); font-weight:600; }
+
+  /* ---------- Rail (target list) ---------- */
+  #rail{
+    background: var(--bg-panel);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 10px;
+  }
+  .rail-head{
+    display:flex; align-items:center; justify-content:space-between;
+    margin: 6px 6px 10px; gap:8px; flex-wrap:wrap;
+  }
+  .rail-head h2{
+    font-size:11px; color: var(--text-muted); text-transform:uppercase;
+    letter-spacing:.1em; margin:0; font-family:'IBM Plex Mono', monospace; white-space:nowrap;
+  }
+  .sort-toggle{ display:flex; gap:4px; }
+  .sort-btn{
+    background:none; border:1px solid var(--line); color:var(--text-muted);
+    font-size:10.5px; font-family:'IBM Plex Mono', monospace;
+    padding:4px 9px; border-radius:999px; cursor:pointer; white-space:nowrap;
+  }
+  .sort-btn:hover{ color: var(--text); }
+  .sort-btn.active{ border-color: var(--accent-gold); color: var(--accent-gold); }
+  #railEmpty{
+    display:none; padding:18px 8px; text-align:center; color:var(--text-muted); font-size:12px; line-height:1.6;
+  }
+  .target-card{
+    display:flex; gap:10px; align-items:center;
+    padding: 8px; border-radius: var(--radius);
+    cursor:pointer; margin-bottom:4px;
+    border: 1px solid transparent;
+    transition: background .15s, border-color .15s;
+  }
+  .target-card:hover{ background: #1c2843; }
+  .target-card.active{ background: #24304f; border-color: var(--accent-gold); }
+  .target-thumb{
+    width:44px; height:44px; border-radius:7px; object-fit:cover;
+    background: linear-gradient(135deg,#2a3550,#182034);
+    flex-shrink:0;
+  }
+  .target-meta{ min-width:0; }
+  .target-meta .t-name{ font-size:13px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .target-meta .t-cat{ font-size:10.5px; color: var(--accent-gold); font-family:'IBM Plex Mono', monospace; }
+
+  /* ---------- Sky viewer ---------- */
+  #skyStage{ position:relative; overflow:hidden; }
+  #aladin-lite-div{ width:100%; height:100%; }
+
+  #flyControls{
+    position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
+    display:flex; gap:8px; z-index:10; flex-wrap:wrap; justify-content:center;
+    max-width: 92%;
+  }
+  .fly-btn{
+    background: rgba(18,26,43,.9); border:1px solid var(--line); color:var(--text);
+    padding: 9px 16px; border-radius: 999px; font-size:12.5px; cursor:pointer;
+    font-family:'IBM Plex Mono', monospace; backdrop-filter: blur(6px);
+    transition: border-color .15s, color .15s;
+  }
+  .fly-btn:hover{ border-color: var(--accent-gold); color: var(--accent-gold); }
+  .fly-btn.fs-active{ border-color: var(--accent-halpha); color: var(--accent-halpha); }
+
+  #legend{
+    position:absolute; left:14px; bottom:78px; z-index:10;
+    background: rgba(18,26,43,.88); border:1px solid var(--line);
+    border-radius: var(--radius); padding:10px 12px; max-width:240px;
+    font-size:11px; color: var(--text-muted); backdrop-filter: blur(6px);
+    line-height:1.5;
+  }
+  #legend .dot{
+    display:inline-block; width:8px; height:8px; border-radius:50%;
+    background: var(--accent-gold); margin-right:6px;
+  }
+
+  #toast{
+    position:absolute; top:14px; left:14px; z-index:15;
+    background: rgba(255,107,91,.15); border:1px solid var(--accent-halpha);
+    color:#ffd9d3; padding:9px 14px; border-radius:8px; font-size:12.5px;
+    max-width:340px; opacity:0; pointer-events:none; transition: opacity .25s;
+  }
+  #toast.show{ opacity:1; }
+
+  /* ---------- 별자리 영문명 라벨 (world2pix로 직접 좌표 계산해 그리는 방식) ---------- */
+  #constLabels{
+    position:absolute; inset:0; z-index:4; overflow:hidden; pointer-events:none;
+  }
+  .const-label{
+    position:absolute; transform:translate(-50%,-50%);
+    font: italic 11px 'IBM Plex Mono', monospace;
+    color: rgba(180,190,220,0.6);
+    white-space:nowrap; pointer-events:none;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    display:none;
+  }
+
+  /* ---------- 자체 상세 패널 (Aladin 팝업을 쓰지 않고 완전히 직접 제어) ----------
+     넉넉한 크기 + min()으로 창 폭에 따라 유동적으로 줄어듦 */
+  .detail-panel{
+    position:absolute; z-index:25;
+    right:16px; bottom:78px;
+    width:min(440px, 92vw);
+    max-height:min(74vh, 680px);
+    overflow-y:auto;
+    background: rgba(15,22,38,.97);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:16px;
+    backdrop-filter: blur(10px);
+    box-shadow:0 16px 46px rgba(0,0,0,.55);
+    opacity:0; transform:translateY(10px);
+    pointer-events:none;
+    transition:opacity .18s ease, transform .18s ease;
+  }
+  .detail-panel.show{ opacity:1; transform:translateY(0); pointer-events:auto; }
+  .detail-close{
+    position:absolute; top:10px; right:10px;
+    width:26px; height:26px; border-radius:50%;
+    background:rgba(255,255,255,.08); border:1px solid var(--line); color:var(--text);
+    cursor:pointer; font-size:15px; line-height:1; display:flex; align-items:center; justify-content:center;
+  }
+  .detail-close:hover{ border-color:var(--accent-halpha); color:var(--accent-halpha); }
+
+  .detail-panel .shot-frame{
+    width:100%; height:230px; border-radius:10px; overflow:hidden; margin-bottom:11px;
+    background: linear-gradient(135deg,#1c2843,#12192b);
+  }
+  .detail-panel .shot-frame img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .detail-panel .p-title{ font-weight:800; font-size:16px; color:var(--text); margin-bottom:3px; padding-right:26px; }
+  .detail-panel .p-count{ font-weight:600; font-size:11.5px; color:var(--accent-gold); }
+  .detail-panel .p-sub{ font-size:12px; color:var(--text-muted); font-family:'IBM Plex Mono',monospace; margin-bottom:11px; }
+  .detail-panel .p-cap{ margin-bottom:11px; }
+  .detail-panel .p-row{ font-size:13px; color:#c7cde0; margin-bottom:4px; line-height:1.5; }
+  .detail-panel .shot-strip{ display:flex; gap:6px; overflow-x:auto; padding-bottom:5px; margin-bottom:11px; }
+  .detail-panel .shot-thumb{
+    width:48px; height:48px; border-radius:6px; object-fit:cover; flex-shrink:0; cursor:pointer;
+    opacity:.5; border:2px solid transparent; transition:opacity .15s,border-color .15s;
+  }
+  .detail-panel .shot-thumb:hover{ opacity:.85; }
+  .detail-panel .shot-thumb.active{ opacity:1; border-color:var(--accent-gold); }
+  .detail-panel a.p-link{
+    display:inline-block; margin-top:2px; font-size:12.5px; font-weight:700;
+    color:var(--accent-gold); text-decoration:none; border-bottom:1px solid var(--accent-gold);
+  }
+
+  @media (max-width: 820px){
+    #app{ grid-template-columns: 1fr; }
+    #rail{
+      position:fixed; left:0; top:56px; bottom:0; width:78vw; max-width:320px;
+      transform: translateX(-100%); transition: transform .2s; z-index:30;
+      box-shadow: 8px 0 24px rgba(0,0,0,.4);
+    }
+    #rail.open{ transform: translateX(0); }
+    #railToggle{ display:block; }
+    #legend{ display:none; }
+    .detail-panel{ left:10px; right:10px; bottom:72px; width:auto; max-height:60vh; }
+  }
+
+  @media (max-height: 560px){
+    .detail-panel .shot-frame{ height:150px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .target-card, .fly-btn, #rail, .detail-panel{ transition:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="topbar">
+    <button id="railToggle" aria-label="관측 기록 목록 열기">☰</button>
+    <div id="brand">
+      <span class="eyebrow">Busan Il Science HS Observatory</span>
+      <span class="title">관측 아카이브 천구 갤러리</span>
+    </div>
+    <div id="searchWrap">
+      <input id="searchInput" type="text" placeholder="대상 검색(M42 등) 또는 관측자 이름 검색 …" />
+    </div>
+    <div id="counter">표시 중 <b id="countNum">0/0</b>개</div>
+  </div>
+
+  <aside id="rail">
+    <div class="rail-head">
+      <h2>관측 기록</h2>
+      <div class="sort-toggle">
+        <button class="sort-btn active" data-sort="name">천체명순</button>
+        <button class="sort-btn" data-sort="date">날짜순</button>
+      </div>
+    </div>
+    <div id="railList"></div>
+    <div id="railEmpty">검색 결과가 없습니다.</div>
+  </aside>
+
+  <div id="skyStage">
+    <div id="aladin-lite-div"></div>
+    <div id="constLabels"></div>
+    <div id="toast"></div>
+    <div id="legend">
+      <div><span class="dot"></span><b>금색 원(점)</b> = 우리가 촬영한 대상</div>
+      <div style="margin-top:6px;">주위의 큰 원은 그 천체의 실제 겉보기 각크기(근사치)를 나타냅니다. 클릭은 가운데 점을 눌러주세요.</div>
+      <div style="margin-top:6px;">마커나 좌측 목록을 클릭하면 상세 정보 패널이 뜹니다(사진이 여러 장이면 썸네일 줄에서 골라볼 수 있어요).</div>
+      <div style="margin-top:6px;">은은한 선·영문명은 IAU 공인 별자리, 옅은 격자는 적경·적위선입니다.</div>
+    </div>
+
+    <div class="detail-panel" id="detailPanel">
+      <button class="detail-close" id="detailClose" aria-label="닫기">×</button>
+      <div id="detailBody"></div>
+    </div>
+
+    <div id="flyControls">
+      <button class="fly-btn" id="btnPrev">← 이전 대상</button>
+      <button class="fly-btn" id="btnRandom">랜덤 탐색</button>
+      <button class="fly-btn" id="btnOverview">전체 보기</button>
+      <button class="fly-btn" id="btnNext">다음 대상 →</button>
+      <button class="fly-btn" id="btnFullscreen">⛶ 전체화면</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ 실제 웹갤러리 소스 폴더(2026-07-29 조회) 기반 데이터 ============
+   좌표는 각 메시에/NGC/IC 카탈로그의 공인 근사 좌표(J2000, 도 단위)이며,
+   플레이트 솔빙으로 정밀 산출된 값이 아닌 "대상 중심 근사치" 프로토타입 데이터입니다.
+   한 대상에 여러 장이 있는 경우 files 배열에 모두 담아, 상세 패널에서 골라볼 수 있게 했습니다. */
+const DEFAULT_TARGETS = [
+  { id:"M31", name:"안드로메다 은하", ra:10.685, dec:41.269, angSize:1.04, files:[
+    { fileId:"14BQ7eEpoYGuS7SsLz2dtZ1CUxSVtcSP4", viewUrl:"https://drive.google.com/file/d/14BQ7eEpoYGuS7SsLz2dtZ1CUxSVtcSP4/view?usp=drivesdk", date:"2026-07-22", place:"영덕 원정관측", gear:"TSA-120", camera:"EOS 60D (8번 카메라)", exposureSec:3300, photographer:"황윤환 촬영 · 조원우 처리" },
+    { fileId:"1w943ulIPY85OxrytjMZrJzRNiUyNshep", viewUrl:"https://drive.google.com/file/d/1w943ulIPY85OxrytjMZrJzRNiUyNshep/view?usp=drivesdk", date:"2026-07-22", place:"영덕 원정관측", gear:"TSA-120", camera:"EOS 60D (8번 카메라)", exposureSec:3300, photographer:"황윤환" },
+    { fileId:"1SZ2YE9NVgcA-P0OtTs7aD5D0Uj7xotxJ", viewUrl:"https://drive.google.com/file/d/1SZ2YE9NVgcA-P0OtTs7aD5D0Uj7xotxJ/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (1번 카메라)", photographer:"황윤환" },
+    { fileId:"1sg5xUPBsXwAgr5CYHc8iYmlRsYQChYU4", viewUrl:"https://drive.google.com/file/d/1sg5xUPBsXwAgr5CYHc8iYmlRsYQChYU4/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라)", photographer:"황윤환" },
+    { fileId:"1Sq5smDdUkxtoxjFyJPhAOf5trkWGNvEu", viewUrl:"https://drive.google.com/file/d/1Sq5smDdUkxtoxjFyJPhAOf5trkWGNvEu/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라)", photographer:"황윤환" },
+    { fileId:"1yCYJ_7zS1lD3qyOuB_aBsUgHCInqX6di", viewUrl:"https://drive.google.com/file/d/1yCYJ_7zS1lD3qyOuB_aBsUgHCInqX6di/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라)", photographer:"황윤환" },
+    { fileId:"1v7wn5MMUZXPo7piZwHXSoBWbpIU0Yhre", viewUrl:"https://drive.google.com/file/d/1v7wn5MMUZXPo7piZwHXSoBWbpIU0Yhre/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라)", photographer:"황윤환" },
+  ]},
+  { id:"M42", name:"오리온대성운", ra:83.822, dec:-5.391, angSize:0.6, files:[
+    { fileId:"1MDFQlPCaQehWKruvdN0afMf47l2Wc_A_", viewUrl:"https://drive.google.com/file/d/1MDFQlPCaQehWKruvdN0afMf47l2Wc_A_/view?usp=drivesdk", date:"2025-12-18", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-eXtreme", photographer:"조원우" },
+    { fileId:"1EWPqmW2jwNmNKyvb8CBABMbxOcURhyx8", viewUrl:"https://drive.google.com/file/d/1EWPqmW2jwNmNKyvb8CBABMbxOcURhyx8/view?usp=drivesdk", date:"2025-12-15", place:"천문대 Pier2", gear:"TOA-130NF", camera:"EOS 60D (2번 카메라)", photographer:"조원우" },
+    { fileId:"1151WiPFqfnb4C2yRXCPVk970Ynjrxxye", viewUrl:"https://drive.google.com/file/d/1151WiPFqfnb4C2yRXCPVk970Ynjrxxye/view?usp=drivesdk", date:"2025-12-18", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-eXtreme", photographer:"조원우" },
+    { fileId:"1nBohCy0_5j3dm3SItWuRwdePb9Grx-eM", viewUrl:"https://drive.google.com/file/d/1nBohCy0_5j3dm3SItWuRwdePb9Grx-eM/view?usp=drivesdk", date:"2025-12-18", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라) · L-Ultimate", photographer:"조원우" },
+  ]},
+  { id:"NGC869", name:"페르세우스 이중성단(h)", ra:34.75, dec:57.15, angSize:0.25, files:[
+    { fileId:"1pN-cfgdfi1-U6ZShs_iatS0pBCXdtaTJ", viewUrl:"https://drive.google.com/file/d/1pN-cfgdfi1-U6ZShs_iatS0pBCXdtaTJ/view?usp=drivesdk", date:"2025-11-11", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라)", exposureSec:6165, photographer:"황윤환" },
+  ]},
+  { id:"M27", name:"아령성운", ra:299.901, dec:22.721, angSize:0.057, files:[
+    { fileId:"17tL9sh8N9YdQeF0kv-UNp9hJzxVpg9hS", viewUrl:"https://drive.google.com/file/d/17tL9sh8N9YdQeF0kv-UNp9hJzxVpg9hS/view?usp=drivesdk", date:"2025-12-01", place:"천문대 Pier3", gear:"TOA-150", camera:"QSI683 (1번 카메라)", photographer:"황윤환" },
+    { fileId:"1MHlLga-08ZRPiyduM91SvF9tq5tWXAiL", viewUrl:"https://drive.google.com/file/d/1MHlLga-08ZRPiyduM91SvF9tq5tWXAiL/view?usp=drivesdk", date:"2025-11-05", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (4번 카메라)", photographer:"이안진·최소윤" },
+    { fileId:"1lnKkSxtre4O9gDR3z5PdQx7-N02GbV7w", viewUrl:"https://drive.google.com/file/d/1lnKkSxtre4O9gDR3z5PdQx7-N02GbV7w/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier2", gear:"TOA-130NF", camera:"EOS 60D (8번 카메라)", photographer:"황윤환" },
+    { fileId:"15ZySMFd9xlY1-_m5-A8qWo6S3lCczJ_E", viewUrl:"https://drive.google.com/file/d/15ZySMFd9xlY1-_m5-A8qWo6S3lCczJ_E/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier4", gear:"CCA-250", camera:"EOS 60D (2번 카메라)", exposureSec:7580, photographer:"황윤환" },
+    { fileId:"1GGhAQD8lfIvYJLHhE-gckTEcJRGru38E", viewUrl:"https://drive.google.com/file/d/1GGhAQD8lfIvYJLHhE-gckTEcJRGru38E/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier4", gear:"CCA-250", camera:"EOS 60D (2번 카메라)", exposureSec:7580, photographer:"황윤환" },
+    { fileId:"18zCOS_6aN3-ax7KfAbTF1F2S0Sigsj_V", viewUrl:"https://drive.google.com/file/d/18zCOS_6aN3-ax7KfAbTF1F2S0Sigsj_V/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier2", gear:"TOA-130NF", camera:"EOS 60D (8번 카메라)", photographer:"황윤환" },
+    { fileId:"1f6738xKW228CfQ9lUo_bAFOeZQczhXp1", viewUrl:"https://drive.google.com/file/d/1f6738xKW228CfQ9lUo_bAFOeZQczhXp1/view?usp=drivesdk", date:"2025-12-04", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 6D MarkII", photographer:"황윤환" },
+    { fileId:"1hcNi4ZdGT-v7r9wf2g-Nfx4Q_KJDZD3I", viewUrl:"https://drive.google.com/file/d/1hcNi4ZdGT-v7r9wf2g-Nfx4Q_KJDZD3I/view?usp=drivesdk", date:"2025-11-05", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (4번 카메라)", photographer:"이안진·최소윤" },
+    { fileId:"1e7GoUZRQYIov9pejxY2T9Vzgo8WZDvlX", viewUrl:"https://drive.google.com/file/d/1e7GoUZRQYIov9pejxY2T9Vzgo8WZDvlX/view?usp=drivesdk", date:"2025-11-05", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (4번 카메라)", photographer:"이안진·최소윤" },
+    { fileId:"13KiLq52F-TShSgAfVO3lIDYMPnU6iPD2", viewUrl:"https://drive.google.com/file/d/13KiLq52F-TShSgAfVO3lIDYMPnU6iPD2/view?usp=drivesdk", date:"2025-11-05", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (4번 카메라)", photographer:"이안진·최소윤" },
+    { fileId:"1XP6kfunG9DXX6HGGnBBQdok_Ur3UQ7Gr", viewUrl:"https://drive.google.com/file/d/1XP6kfunG9DXX6HGGnBBQdok_Ur3UQ7Gr/view?usp=drivesdk", date:"2025-11-05", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (4번 카메라)", photographer:"이안진·최소윤" },
+    { fileId:"10JWGVuS_EygaYRk6ACtVSucpxohVAUji", viewUrl:"https://drive.google.com/file/d/10JWGVuS_EygaYRk6ACtVSucpxohVAUji/view?usp=drivesdk", date:"2025-11-05", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (4번 카메라)", photographer:"이안진·최소윤" },
+  ]},
+  { id:"NGC7000", name:"북아메리카 성운", ra:314.7, dec:44.5, angSize:0.92, files:[
+    { fileId:"1ecpLVkfP17MAX-YSapRgc2jf9oWe6m-_", viewUrl:"https://drive.google.com/file/d/1ecpLVkfP17MAX-YSapRgc2jf9oWe6m-_/view?usp=drivesdk", date:"2026-07-23", place:"영덕 원정관측", gear:"FSQ-106ED (개인 장비)", camera:"EOS 60D (8번 카메라)", exposureSec:4230, photographer:"황윤환" },
+    { fileId:"1bSgpgwvgR6Jc8s2IA0KVjtVxKcRU4UwU", viewUrl:"https://drive.google.com/file/d/1bSgpgwvgR6Jc8s2IA0KVjtVxKcRU4UwU/view?usp=drivesdk", date:"2025-12-18", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-eXtreme", photographer:"조원우" },
+  ]},
+  { id:"M11", name:"야생오리 성단", ra:282.77, dec:-6.27, angSize:0.117, files:[
+    { fileId:"1aXHrbVP_6S8UY4L6UJ8r4XEM_H3TTq7K", viewUrl:"https://drive.google.com/file/d/1aXHrbVP_6S8UY4L6UJ8r4XEM_H3TTq7K/view?usp=drivesdk", date:"2026-07-15", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (7번 카메라) · L-Quad Enhance", photographer:"윤도훈·조원우·최승현" },
+  ]},
+  { id:"M45", name:"플레이아데스 성단", ra:56.75, dec:24.12, angSize:0.92, files:[
+    { fileId:"1YOQ7Zb-gWm73rdGocH00KDzP0LjoOXl8", viewUrl:"https://drive.google.com/file/d/1YOQ7Zb-gWm73rdGocH00KDzP0LjoOXl8/view?usp=drivesdk", date:"2025-10-27", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (3번 카메라)", photographer:"이예지·권민재" },
+    { fileId:"1aDOSjjkCWVXxaLNep8-4q3e9u2K9vUG3", viewUrl:"https://drive.google.com/file/d/1aDOSjjkCWVXxaLNep8-4q3e9u2K9vUG3/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (1번 카메라)", photographer:"황윤환" },
+    { fileId:"1Zti4K1yRAhlFGZQQsA4o2xT40Li9y1W5", viewUrl:"https://drive.google.com/file/d/1Zti4K1yRAhlFGZQQsA4o2xT40Li9y1W5/view?usp=drivesdk", date:"2025-11-10", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라)", photographer:"황윤환" },
+  ]},
+  { id:"M101", name:"바람개비 은하", ra:210.80, dec:54.35, angSize:0.232, files:[
+    { fileId:"1Iokqd9h-xF87QCCFvpP2Btl4YbZwyijv", viewUrl:"https://drive.google.com/file/d/1Iokqd9h-xF87QCCFvpP2Btl4YbZwyijv/view?usp=drivesdk", date:"2026-07-23", place:"영덕 원정관측", gear:"TSA-120", camera:"Canon 60D (8번 카메라)", exposureSec:690, photographer:"황윤환" },
+  ]},
+  { id:"M33", name:"삼각형자리 은하", ra:23.48, dec:30.66, angSize:0.421, files:[
+    { fileId:"1duF9HePmZ38KTENtrXvoPg9ISpk6wZBc", viewUrl:"https://drive.google.com/file/d/1duF9HePmZ38KTENtrXvoPg9ISpk6wZBc/view?usp=drivesdk", date:"2025-11-11", place:"천문대 Pier2", gear:"TOA-130NF", camera:"EOS 60D (1번 카메라)", photographer:"황윤환" },
+    { fileId:"1JZ_TpUY96wNpf1pTageSpLoJVMkmQkPo", viewUrl:"https://drive.google.com/file/d/1JZ_TpUY96wNpf1pTageSpLoJVMkmQkPo/view?usp=drivesdk", date:"2025-11-11", place:"천문대 Pier2", gear:"TOA-130NF", camera:"EOS 60D (1번 카메라)", photographer:"황윤환" },
+  ]},
+  { id:"M16", name:"독수리 성운", ra:274.70, dec:-13.82, angSize:0.263, files:[
+    { fileId:"1YEESRV7C6uNucXyeEhYN_6BpEQ9K99RZ", viewUrl:"https://drive.google.com/file/d/1YEESRV7C6uNucXyeEhYN_6BpEQ9K99RZ/view?usp=drivesdk", date:"2026-06-11", place:"천문대 원형돔", gear:"FET-300", camera:"EOS 60D (7번 카메라) · L-eXtreme", note:"채널: Green (별 제거)", photographer:"조원우" },
+    { fileId:"1oaYETlZ57HU2TEjQuu_qrv9NRuPnGRGz", viewUrl:"https://drive.google.com/file/d/1oaYETlZ57HU2TEjQuu_qrv9NRuPnGRGz/view?usp=drivesdk", date:"2026-06-11", place:"천문대 원형돔", gear:"FET-300", camera:"EOS 60D (7번 카메라) · L-eXtreme", note:"채널: Red (별 제거)", photographer:"조원우" },
+    { fileId:"1ATrkm8TQAVKT3HlY8sO_PKs-AJ-ispwP", viewUrl:"https://drive.google.com/file/d/1ATrkm8TQAVKT3HlY8sO_PKs-AJ-ispwP/view?usp=drivesdk", date:"2026-06-11", place:"천문대 원형돔", gear:"FET-300", camera:"EOS 60D (7번 카메라) · L-eXtreme", note:"채널: Gray (별 제거)", photographer:"조원우" },
+  ]},
+  { id:"M81", name:"보데의 은하", ra:148.89, dec:69.07, angSize:0.171, files:[
+    { fileId:"1CrdKSPOvN6R74sqfV-74lS4ajAnGstgu", viewUrl:"https://drive.google.com/file/d/1CrdKSPOvN6R74sqfV-74lS4ajAnGstgu/view?usp=drivesdk", date:"2026-03-10", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-Quad", photographer:"조원우" },
+    { fileId:"1W_OmnfosrqFGRCaBzErdbBy7YnnQSnKe", viewUrl:"https://drive.google.com/file/d/1W_OmnfosrqFGRCaBzErdbBy7YnnQSnKe/view?usp=drivesdk", date:"2026-03-17", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라) · L-Quad", photographer:"조원우" },
+  ]},
+  { id:"M44", name:"프레세페(벌집성단)", ra:130.1, dec:19.98, angSize:0.792, files:[
+    { fileId:"1x1Rs-XxSqAr_VLmHmqCBja9lvzw5xR-O", viewUrl:"https://drive.google.com/file/d/1x1Rs-XxSqAr_VLmHmqCBja9lvzw5xR-O/view?usp=drivesdk", date:"2026-04-02", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (7번 카메라) · UV-IR", photographer:"조원우" },
+  ]},
+  { id:"M65", name:"사자자리 삼중은하", ra:169.73, dec:13.09, angSize:0.053, files:[
+    { fileId:"1M-FN7UKgDJytiNE7GLBRMS6UpPgCrLpj", viewUrl:"https://drive.google.com/file/d/1M-FN7UKgDJytiNE7GLBRMS6UpPgCrLpj/view?usp=drivesdk", date:"2026-04-07", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라) · L-Quad", photographer:"조원우" },
+  ]},
+  { id:"M51", name:"소용돌이 은하", ra:202.47, dec:47.20, angSize:0.075, files:[
+    { fileId:"11QUqodCh8QpdYfjbXjJJgJFkI6sMSQOC", viewUrl:"https://drive.google.com/file/d/11QUqodCh8QpdYfjbXjJJgJFkI6sMSQOC/view?usp=drivesdk", date:"2026-06-09", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-Quad", photographer:"조원우" },
+    { fileId:"1DAPdAqAbh9b0u3Sijd5kNodKIjtNSB79", viewUrl:"https://drive.google.com/file/d/1DAPdAqAbh9b0u3Sijd5kNodKIjtNSB79/view?usp=drivesdk", date:"2026-06-09", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-Quad", note:"재처리본", photographer:"조원우" },
+  ]},
+  { id:"M36", name:"마차부자리 산개성단", ra:84.08, dec:34.13, angSize:0.1, files:[
+    { fileId:"1QgOPh1WZvwftau5RqePueUsAG3Y-Jdfb", viewUrl:"https://drive.google.com/file/d/1QgOPh1WZvwftau5RqePueUsAG3Y-Jdfb/view?usp=drivesdk", date:"2026-03-17", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · UV-IR cut", photographer:"조원우" },
+  ]},
+  { id:"IC434", name:"말머리성운 부근", ra:85.25, dec:-2.46, angSize:0.375, files:[
+    { fileId:"1BlSinOttEWeP2IPfnm5vErWcUIAVuksG", viewUrl:"https://drive.google.com/file/d/1BlSinOttEWeP2IPfnm5vErWcUIAVuksG/view?usp=drivesdk", date:"2026-02-04", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-eXtreme", photographer:"조원우" },
+  ]},
+  { id:"IC1805", name:"하트성운", ra:38.18, dec:61.45, angSize:1.25, files:[
+    { fileId:"1aE1Cxka-aSzA3I6i8HwS4Ov91UnD5yhY", viewUrl:"https://drive.google.com/file/d/1aE1Cxka-aSzA3I6i8HwS4Ov91UnD5yhY/view?usp=drivesdk", date:"2025-12-22", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (7번 카메라) · L-Ultimate", photographer:"조원우" },
+  ]},
+  { id:"NGC2264", name:"크리스마스트리 성단", ra:100.28, dec:9.90, angSize:0.292, files:[
+    { fileId:"1ulAujBkbmDn7oXXAQOwBB580EOoxG9RA", viewUrl:"https://drive.google.com/file/d/1ulAujBkbmDn7oXXAQOwBB580EOoxG9RA/view?usp=drivesdk", date:"2025-12-29", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (8번 카메라) · L-eXtreme", photographer:"조원우" },
+  ]},
+  { id:"M25", name:"궁수자리 산개성단", ra:277.90, dec:-19.12, angSize:0.267, files:[
+    { fileId:"15yxsI5efyM3k6jBa_XSxS7i0Dp7NSh2v", viewUrl:"https://drive.google.com/file/d/15yxsI5efyM3k6jBa_XSxS7i0Dp7NSh2v/view?usp=drivesdk", date:"2025-10-28", place:"천문대 Pier3", gear:"TOA-150", camera:"EOS 60D (3번 카메라)", photographer:"장준호·최윤형" },
+  ]},
+  { id:"M57", name:"고리성운", ra:283.40, dec:33.03, angSize:0.01, files:[
+    { fileId:"1fgxdRvXE2NQ6tOZkRGxT-hhPWVMD3XvR", viewUrl:"https://drive.google.com/file/d/1fgxdRvXE2NQ6tOZkRGxT-hhPWVMD3XvR/view?usp=drivesdk", date:"2025-11-05", place:"천문대 Pier1", gear:"TOA-150", camera:"EOS 60D (5번 카메라)", photographer:"박경권·박시원" },
+  ]},
+];
+
+/* ============ 실시간 데이터 연동 (선택 사항) ============
+   Apps Script 웹 앱을 배포한 뒤, 아래 DATA_API_URL에 그 주소를 붙여넣으면
+   페이지를 열 때마다 최신 관측 데이터를 자동으로 불러옵니다.
+   비워두면(기본값) 위의 DEFAULT_TARGETS(저장된 스냅샷)만 사용합니다.
+   설치 방법: "천문대_갤러리_데이터생성_설치가이드.md" 참고. */
+const DATA_API_URL = ''; // 예: 'https://script.google.com/macros/s/AKfycb.../exec'
+
+let targets = DEFAULT_TARGETS;
+
+async function loadLiveTargets(){
+  if(!DATA_API_URL) return false;
+  try{
+    const controller = new AbortController();
+    const timer = setTimeout(()=>controller.abort(), 7000);
+    const res = await fetch(DATA_API_URL, { signal: controller.signal });
+    clearTimeout(timer);
+    if(!res.ok) throw new Error('http ' + res.status);
+    const data = await res.json();
+    if(Array.isArray(data) && data.length){
+      targets = data;
+      return true;
+    }
+    return false;
+  }catch(e){
+    showToast('실시간 데이터를 불러오지 못해 저장된 기본 데이터로 표시합니다.');
+    return false;
+  }
+}
+
+function thumbUrl(fileId){ return `https://drive.google.com/thumbnail?id=${fileId}&sz=w700`; }
+function targetMaxDate(t){ return t.files.reduce((m,f)=> f.date > m ? f.date : m, t.files[0].date); }
+
+function formatExposure(sec){
+  const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+  if(h>0) return `${h}시간 ${m}분${s? ' '+s+'초':''}`;
+  if(m>0) return `${m}분${s? ' '+s+'초':''}`;
+  return `${s}초`;
+}
+
+function captionHtml(f){
+  return `
+    <div class="p-row">📅 ${f.date} · ${f.place}</div>
+    <div class="p-row">🔭 ${f.gear}</div>
+    <div class="p-row">📷 ${f.camera}</div>
+    ${f.exposureSec ? `<div class="p-row">⏱ 총 노출시간: ${formatExposure(f.exposureSec)} (result_${f.exposureSec}s.fit 기준)</div>` : ''}
+    ${f.note ? `<div class="p-row">🎛 ${f.note}</div>` : ''}
+    <div class="p-row">✍️ ${f.photographer}</div>`;
+}
+
+/* ---------- 자체 상세 패널 (Aladin 팝업 대신 직접 그리고 직접 크기를 통제) ---------- */
+let currentDetailTarget = null;
+
+function detailBodyHtml(t){
+  const f0 = t.files[0];
+  const stripHtml = t.files.length > 1
+    ? `<div class="shot-strip" id="detailStrip">${
+        t.files.map((f,i)=>`<img class="shot-thumb${i===0?' active':''}" data-idx="${i}" src="${thumbUrl(f.fileId)}" onerror="this.style.opacity='0.2'"/>`).join('')
+      }</div>`
+    : '';
+  return `
+    <div class="shot-frame"><img id="detailImg" src="${thumbUrl(f0.fileId)}" alt="${t.name}" onerror="this.style.display='none'"/></div>
+    <div class="p-title">${t.id} · ${t.name}${t.files.length>1 ? ` <span class="p-count">총 ${t.files.length}장</span>` : ''}</div>
+    <div class="p-sub">RA ${t.ra.toFixed(2)}° · DEC ${t.dec.toFixed(2)}°</div>
+    <div class="p-cap" id="detailCap">${captionHtml(f0)}</div>
+    ${stripHtml}
+    <a class="p-link" id="detailLink" href="${f0.viewUrl}" target="_blank" rel="noopener">Drive에서 원본 보기 →</a>
+  `;
+}
+
+function showDetailPanel(t){
+  currentDetailTarget = t;
+  document.getElementById('detailBody').innerHTML = detailBodyHtml(t);
+  document.getElementById('detailPanel').classList.add('show');
+}
+
+function showCandidatePanel(name){
+  currentDetailTarget = null;
+  document.getElementById('detailBody').innerHTML = `
+    <div class="p-title">${name}</div>
+    <div class="p-row" style="margin-top:10px;">아직 이 대상을 촬영한 기록이 없습니다.</div>
+    <div class="p-row">별헤는밤 동아리 다음 관측 후보로 제안해보세요.</div>
+  `;
+  document.getElementById('detailPanel').classList.add('show');
+}
+
+document.getElementById('detailBody').addEventListener('click', (e)=>{
+  const thumb = e.target.closest('.shot-thumb');
+  if(!thumb || !currentDetailTarget) return;
+  const idx = Number(thumb.dataset.idx);
+  const f = currentDetailTarget.files[idx];
+  if(!f) return;
+  const img = document.getElementById('detailImg');
+  if(img){ img.style.display=''; img.src = thumbUrl(f.fileId); }
+  document.getElementById('detailCap').innerHTML = captionHtml(f);
+  document.getElementById('detailLink').href = f.viewUrl;
+  document.querySelectorAll('#detailStrip .shot-thumb').forEach(el => el.classList.toggle('active', el === thumb));
+});
+document.getElementById('detailClose').addEventListener('click', ()=>{
+  document.getElementById('detailPanel').classList.remove('show');
+});
+
+/* ---------- rail 목록: 정렬(천체명순/날짜순) + 검색(대상명·관측자) 반영 ---------- */
+const railList = document.getElementById('railList');
+const railEmpty = document.getElementById('railEmpty');
+let currentSort = 'name';
+let currentSortDir = 1; // 1 = 오름차순(가나다순/오래된순), -1 = 내림차순(역순/최신순)
+let currentQuery = '';
+
+function matchesQuery(t, q){
+  if(!q) return true;
+  if(t.id.toLowerCase().includes(q.toLowerCase())) return true;
+  if(t.name.includes(q)) return true;
+  return t.files.some(f => f.photographer && f.photographer.includes(q));
+}
+
+function getFilteredSorted(){
+  let list = targets.filter(t => matchesQuery(t, currentQuery));
+  if(currentSort === 'date'){
+    list = list.sort((a,b)=> currentSortDir * targetMaxDate(a).localeCompare(targetMaxDate(b)));
+  } else {
+    list = list.sort((a,b)=> currentSortDir * a.id.localeCompare(b.id));
+  }
+  return list;
+}
+
+function updateSortLabels(){
+  document.querySelectorAll('.sort-btn').forEach(b=>{
+    const mode = b.dataset.sort;
+    const base = mode === 'name' ? '천체명순' : '날짜순';
+    b.textContent = currentSort === mode ? `${base} ${currentSortDir === 1 ? '▲' : '▼'}` : base;
+  });
+}
+
+function renderRail(){
+  const list = getFilteredSorted();
+  railList.innerHTML = '';
+  railEmpty.style.display = list.length ? 'none' : 'block';
+  list.forEach(t=>{
+    const f0 = t.files[0];
+    const card = document.createElement('div');
+    card.className = 'target-card';
+    card.dataset.id = t.id;
+    if(currentDetailTarget && currentDetailTarget.id === t.id) card.classList.add('active');
+    card.innerHTML = `
+      <img class="target-thumb" src="${thumbUrl(f0.fileId)}" onerror="this.style.background='linear-gradient(135deg,#2a3550,#182034)'; this.removeAttribute('src');" />
+      <div class="target-meta">
+        <div class="t-name">${t.name}</div>
+        <div class="t-cat">${t.id} · ${currentSort==='date' ? targetMaxDate(t) : f0.date}${t.files.length>1 ? ` · ${t.files.length}장` : ''}</div>
+      </div>`;
+    card.addEventListener('click', ()=> flyTo(t));
+    railList.appendChild(card);
+  });
+  document.getElementById('countNum').textContent = `${list.length}/${targets.length}`;
+}
+
+document.querySelectorAll('.sort-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const mode = btn.dataset.sort;
+    if(currentSort === mode){
+      currentSortDir *= -1; // 같은 버튼 재클릭 → 오름/내림차순 토글
+    } else {
+      currentSort = mode;
+      currentSortDir = mode === 'date' ? -1 : 1; // 날짜는 기본 최신순, 이름은 기본 가나다순
+    }
+    document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    updateSortLabels();
+    renderRail();
+  });
+});
+
+updateSortLabels();
+renderRail();
+
+/* ---------- toast ---------- */
+let toastTimer;
+function showToast(msg){
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 3600);
+}
+
+/* ---------- Aladin 초기화 ---------- */
+let aladin, catalog, candidateCatalog;
+let currentIndex = 0;
+let flying = false;
+
+A.init.then(async () => {
+  aladin = A.aladin('#aladin-lite-div', {
+    survey: 'P/DSS2/color',
+    fov: 150,
+    target: '10:00:00 +30:00:00',
+    cooFrame: 'equatorial',
+    showReticle: false,
+    showZoomControl: true,
+    showFullscreenControl: false,   // Aladin 자체 전체화면은 끄고, 하단의 자체 버튼을 사용
+    showLayersControl: false,
+    showGotoControl: false,
+    showCooGrid: false,             // 기본 격자 대신 아래에서 직접 그려 두께·투명도를 통제
+    showCooGridControl: false,
+    showFrame: true,                // 중심 좌표 · FoV 표시 (요청에 따라 다시 켬)
+  });
+
+  buildSkyContent(aladin);
+
+  // DATA_API_URL이 설정돼 있으면 실시간 데이터를 백그라운드로 불러와 교체
+  const updated = await loadLiveTargets();
+  if(updated){
+    try{ aladin.removeLayers(); }catch(e){}       // 마커·격자·별자리선 등 기존 레이어 전체 초기화
+    document.getElementById('constLabels').innerHTML = ''; // 별자리 이름 라벨도 초기화
+    buildSkyContent(aladin);                        // 새 targets로 다시 그리기
+    renderRail();                                    // 좌측 목록도 새 데이터로 다시 그리기
+    showToast(`실시간 데이터로 대상 ${targets.length}개를 불러왔습니다.`);
+  }
+});
+
+/* 마커(각크기 원 + 클릭용 점) · 격자 · 별자리선/이름을 targets 기준으로 그리는 함수.
+   실시간 데이터가 새로 도착했을 때도 이 함수를 다시 호출해 화면을 재구성한다. */
+function buildSkyContent(aladin){
+  // 실제 겉보기 각크기만큼 커버되는 옅은 원(footprint) — 카탈로그보다 먼저 추가해 마커 뒤에 깔리도록 함
+  try{
+    const footprintOverlay = A.graphicOverlay({ color: 'rgba(232,184,92,0.4)', lineWidth: 1.3 });
+    aladin.addOverlay(footprintOverlay);
+    targets.forEach(t=>{
+      try{ footprintOverlay.add(A.circle(t.ra, t.dec, t.angSize, { color: 'rgba(232,184,92,0.4)' })); }catch(e){}
+    });
+  }catch(e){}
+
+  catalog = A.catalog({ name: '관측기록', shape: 'circle', sourceSize: 10, color: '#e8b85c' });
+  aladin.addCatalog(catalog);
+  candidateCatalog = A.catalog({ name: '탐색후보', shape: 'circle', sourceSize: 12, color: '#5b8bff' });
+  aladin.addCatalog(candidateCatalog);
+
+  targets.forEach(t=>{
+    try{ catalog.addSources([ A.source(t.ra, t.dec, { id: t.id }) ]); }catch(e){}
+  });
+
+  // 마커 클릭 → 자체 상세 패널 표시 + 좌측 목록 하이라이트 동기화
+  try{
+    aladin.on('objectClicked', (object) => {
+      if(!object || !object.data) return;
+      if(object.data.id){
+        const t = targets.find(x => x.id === object.data.id);
+        if(t){ currentIndex = targets.findIndex(x => x.id === t.id); highlightCard(t.id); showDetailPanel(t); }
+      } else if(object.data.candidate){
+        showCandidatePanel(object.data.name);
+      }
+    });
+  }catch(e){}
+
+  drawGrid(aladin);
+  loadConstellations(aladin);
+}
+
+/* ---------- 은은한 적경·적위 격자 (직접 그려서 두께·투명도를 완전히 통제) ---------- */
+function drawGrid(aladin){
+  try{
+    const gridColor = 'rgba(139,147,172,0.14)';
+    const overlay = A.graphicOverlay({ color: gridColor, lineWidth: 1 });
+    aladin.addOverlay(overlay);
+    for(let ra=0; ra<360; ra+=30){
+      const pts=[];
+      for(let dec=-80; dec<=80; dec+=10) pts.push([ra,dec]);
+      try{ overlay.add(A.polyline(pts, { color: gridColor })); }catch(e){}
+    }
+    for(let dec=-60; dec<=60; dec+=30){
+      const pts=[];
+      for(let ra=0; ra<=360; ra+=10) pts.push([ra,dec]);
+      try{ overlay.add(A.polyline(pts, { color: gridColor })); }catch(e){}
+    }
+  }catch(e){}
+}
+
+/* ---------- 별자리선 · 별자리 영문명 (은은하게) ----------
+   IAU 공인 별자리선/이름 좌표 데이터를 d3-celestial(오픈소스, ofrohn/d3-celestial, BSD)에서
+   브라우저가 직접 불러옵니다. 실패해도 나머지 기능에는 영향 없도록 방어적으로 처리합니다. */
+function lonToRa(lon){ return lon < 0 ? lon + 360 : lon; }
+
+/* 여러 URL을 순서대로 시도 (첫 URL이 학교 네트워크 등에서 막혀도 다음 URL로 대체) */
+function fetchJsonWithFallback(urls){
+  let p = Promise.reject(new Error('no url'));
+  urls.forEach(url=>{
+    p = p.catch(()=> fetch(url).then(r=>{
+      if(!r.ok) throw new Error('http ' + r.status);
+      return r.json();
+    }));
+  });
+  return p;
+}
+
+function loadConstellations(aladin){
+  const LINES_URLS = [
+    'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.lines.json',
+    'https://cdn.jsdelivr.net/gh/ofrohn/d3-celestial/data/constellations.lines.json'
+  ];
+  const NAMES_URLS = [
+    'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/data/constellations.json',
+    'https://cdn.jsdelivr.net/gh/ofrohn/d3-celestial/data/constellations.json'
+  ];
+
+  fetchJsonWithFallback(LINES_URLS).then(geo=>{
+    const lineColor = 'rgba(139,147,172,0.28)';
+    const overlay = A.graphicOverlay({ color: lineColor, lineWidth: 1 });
+    aladin.addOverlay(overlay);
+    (geo.features || []).forEach(f=>{
+      try{
+        const multiLine = f.geometry && f.geometry.coordinates;
+        if(!multiLine) return;
+        multiLine.forEach(line=>{
+          const pts = line.map(([lon,lat]) => [lonToRa(lon), lat]);
+          overlay.add(A.polyline(pts, { color: lineColor }));
+        });
+      }catch(e){ /* 개별 별자리 하나가 이상해도 나머지는 계속 그림 */ }
+    });
+  }).catch(()=>{ showToast('별자리선을 불러오지 못했습니다 (네트워크 문제일 수 있음)'); });
+
+  fetchJsonWithFallback(NAMES_URLS).then(geo=>{
+    // properties.name = IAU 공식 명칭(라틴/영문 표기와 사실상 동일), properties.en을 보조로 사용
+    // Aladin 카탈로그의 labelColumn 기능이 수동 생성 소스에서는 안정적으로 동작하지 않아,
+    // 확실하게 동작하는 world2pix로 직접 화면 좌표를 계산해 얹는 방식으로 구현함.
+    const container = document.getElementById('constLabels');
+    const items = [];
+    (geo.features || []).forEach(f=>{
+      try{
+        if(!f.geometry || !f.properties) return;
+        const [lon, lat] = f.geometry.coordinates;
+        const label = f.properties.name || f.properties.en || f.id || '';
+        if(!label) return;
+        items.push({ ra: lonToRa(lon), dec: lat, label });
+      }catch(e){ /* 개별 항목 하나가 깨져 있어도 전체가 실패하지 않도록 건너뜀 */ }
+    });
+    items.forEach(item=>{
+      const el = document.createElement('span');
+      el.className = 'const-label';
+      el.textContent = item.label;
+      el.dataset.ra = item.ra;
+      el.dataset.dec = item.dec;
+      container.appendChild(el);
+    });
+    requestAnimationFrame(tickConstellationLabels);
+  }).catch(()=>{ showToast('별자리 이름을 불러오지 못했습니다 (네트워크 문제일 수 있음)'); });
+}
+
+/* 매 프레임 별자리 라벨의 화면 좌표를 다시 계산 (팬/줌해도 항상 맞는 위치에 표시됨) */
+function tickConstellationLabels(){
+  if(aladin){
+    const w = aladin.getSize ? aladin.getSize() : null;
+    document.querySelectorAll('.const-label').forEach(el=>{
+      try{
+        const xy = aladin.world2pix(Number(el.dataset.ra), Number(el.dataset.dec));
+        if(xy && (!w || (xy[0]>=-40 && xy[0]<=w[0]+40 && xy[1]>=-20 && xy[1]<=w[1]+20))){
+          el.style.display = 'block';
+          el.style.left = xy[0] + 'px';
+          el.style.top = xy[1] + 'px';
+        } else {
+          el.style.display = 'none';
+        }
+      }catch(e){ el.style.display = 'none'; }
+    });
+  }
+  requestAnimationFrame(tickConstellationLabels);
+}
+
+/* ---------- 구면 위 이동(플라이) ---------- */
+function shortestRaDelta(from, to){
+  let d = to - from;
+  d = ((d + 180) % 360 + 360) % 360 - 180;
+  return d;
+}
+function easeInOutCubic(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+
+function flyTo(target, opts={}){
+  if(!aladin) return;
+  flying = true;
+  const [curRa, curDec] = aladin.getRaDec();
+  const curFov = aladin.getFov()[0];
+  const targetFov = opts.fov || 3.5;
+  const dRa = shortestRaDelta(curRa, target.ra);
+  const dDec = target.dec - curDec;
+  const dFov = targetFov - curFov;
+  const duration = 850;
+  const t0 = performance.now();
+
+  function step(now){
+    const t = Math.min(1, (now - t0) / duration);
+    const e = easeInOutCubic(t);
+    const ra = (curRa + dRa * e + 360) % 360;
+    const dec = curDec + dDec * e;
+    const fov = curFov + dFov * e;
+    try{ aladin.gotoRaDec(ra, dec); aladin.setFov(fov); }catch(err){}
+    if (t < 1) requestAnimationFrame(step);
+    else { flying = false; }
+  }
+  requestAnimationFrame(step);
+
+  currentIndex = targets.findIndex(x=>x.id===target.id);
+  highlightCard(target.id);
+  showDetailPanel(target);
+}
+
+function highlightCard(id){
+  document.querySelectorAll('.target-card').forEach(c=>{
+    c.classList.toggle('active', c.dataset.id === id);
+  });
+  const active = document.querySelector('.target-card.active');
+  if(active) active.scrollIntoView({block:'nearest'});
+}
+
+/* ---------- 검색 ----------
+   입력하는 즉시(input) 좌측 목록을 대상명·관측자 이름 기준으로 실시간 필터링합니다.
+   Enter를 누르면: 우리 아카이브의 대상이면 그 자리로 이동, 관측자 이름이면 목록 필터 결과를
+   안내하는 토스트만 띄우고, 그 외에는 실제 하늘에서 이름으로 검색(Sesame)합니다. */
+const searchInput = document.getElementById('searchInput');
+
+searchInput.addEventListener('input', ()=>{
+  currentQuery = searchInput.value.trim();
+  renderRail();
+});
+
+searchInput.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter') return;
+  const q = searchInput.value.trim();
+  if(!q) return;
+  const qUpper = q.toUpperCase().replace(/\s+/g,'');
+  const localExact = targets.find(t =>
+    t.id.replace(/\s+/g,'').toUpperCase() === qUpper || t.name.includes(q)
+  );
+  if(localExact){ flyTo(localExact); return; }
+
+  const byObserver = targets.filter(t => t.files.some(f => f.photographer && f.photographer.includes(q)));
+  if(byObserver.length){
+    showToast(`"${q}" 관측자가 촬영한 대상 ${byObserver.length}개를 목록에 표시했습니다.`);
+    return; // 목록은 input 이벤트로 이미 필터링되어 있음
+  }
+
+  if(!aladin){ return; }
+  try{
+    aladin.gotoObject(q, {
+      success: () => {
+        showToast(`"${q}" — 아직 우리 아카이브에 촬영 기록이 없는 대상입니다. 다음 관측 후보로 어떠세요?`);
+        try{
+          const [ra, dec] = aladin.getRaDec();
+          candidateCatalog.addSources([ A.source(ra, dec, { candidate:true, name:q }) ]);
+        }catch(err){}
+      },
+      error: () => showToast(`"${q}" 대상을 하늘에서 찾을 수 없습니다. 이름을 다시 확인해주세요.`)
+    });
+  }catch(e){
+    showToast('검색 기능을 사용할 수 없습니다.');
+  }
+});
+
+/* ---------- 하단 컨트롤 ---------- */
+document.getElementById('btnNext').addEventListener('click', ()=>{
+  if(flying) return;
+  const idx = (currentIndex + 1) % targets.length;
+  flyTo(targets[idx]);
+});
+document.getElementById('btnPrev').addEventListener('click', ()=>{
+  if(flying) return;
+  const idx = (currentIndex - 1 + targets.length) % targets.length;
+  flyTo(targets[idx]);
+});
+document.getElementById('btnRandom').addEventListener('click', ()=>{
+  if(flying) return;
+  let idx = Math.floor(Math.random()*targets.length);
+  if(idx === currentIndex) idx = (idx+1) % targets.length;
+  flyTo(targets[idx]);
+});
+document.getElementById('btnOverview').addEventListener('click', ()=>{
+  if(!aladin || flying) return;
+  flying = true;
+  const [curRa, curDec] = aladin.getRaDec();
+  const curFov = aladin.getFov()[0];
+  const dFov = 150 - curFov;
+  const t0 = performance.now();
+  function step(now){
+    const t = Math.min(1, (now-t0)/700);
+    const e = easeInOutCubic(t);
+    try{ aladin.setFov(curFov + dFov*e); }catch(err){}
+    if(t<1) requestAnimationFrame(step); else flying=false;
+  }
+  requestAnimationFrame(step);
+});
+
+/* ---------- 자체 전체화면 토글 ---------- */
+const appEl = document.getElementById('app');
+const fsBtn = document.getElementById('btnFullscreen');
+function isFs(){ return document.fullscreenElement === appEl || document.webkitFullscreenElement === appEl; }
+function updateFsBtn(){
+  fsBtn.textContent = isFs() ? '⤡ 전체화면 종료' : '⛶ 전체화면';
+  fsBtn.classList.toggle('fs-active', isFs());
+}
+fsBtn.addEventListener('click', ()=>{
+  try{
+    if(!isFs()){
+      const req = appEl.requestFullscreen || appEl.webkitRequestFullscreen;
+      if(req) req.call(appEl); else showToast('이 브라우저에서는 전체화면을 지원하지 않습니다.');
+    } else {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if(exit) exit.call(document);
+    }
+  }catch(e){ showToast('전체화면 전환에 실패했습니다.'); }
+});
+document.addEventListener('fullscreenchange', updateFsBtn);
+document.addEventListener('webkitfullscreenchange', updateFsBtn);
+
+/* ---------- 모바일 rail 토글 ---------- */
+const rail = document.getElementById('rail');
+document.getElementById('railToggle').addEventListener('click', ()=>{
+  rail.classList.toggle('open');
+});
+railList.addEventListener('click', ()=>{
+  if(window.innerWidth <= 820) rail.classList.remove('open');
+});
+</script>
+</body>
+</html>
